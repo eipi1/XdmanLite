@@ -41,11 +41,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Observable;
 
+import org.sdg.xdman.core.Dialog;
 import org.sdg.xdman.core.common.ftp.FTPConnection;
 import org.sdg.xdman.core.common.http.HttpConnection;
 import org.sdg.xdman.core.common.http.XDMHttpClient;
-import org.sdg.xdman.gui.AuthDialog;
-import org.sdg.xdman.gui.DownloadWindow;
 import org.sdg.xdman.util.MIMEUtil;
 import org.sdg.xdman.util.XDMUtil;
 
@@ -71,7 +70,6 @@ public class ConnectionManager extends Observable implements IXDMConstants,
 	String resume_support = "Unknown", status = "connecting...";
 	int cnc = 0;
 	public int state = STOPPED;
-	String category;
 	File prevtempdir;
 	boolean assembling = false;
 	long assemble_len = 0;
@@ -116,7 +114,6 @@ public class ConnectionManager extends Observable implements IXDMConstants,
 		this.statefile = new File(tempdir, statefileName);
 		this.fileName = getFileName(url);
 		this.finalFileName = file;
-		category = XDMUtil.findCategory(fileName);
 		this.extra = extra;
 		this.config = config;
 		if (extra != null) {
@@ -197,7 +194,6 @@ public class ConnectionManager extends Observable implements IXDMConstants,
 			statefile = new File(tempdir, ".state");
 			System.out.println("Temporary directory: " + tempdir);
 			c.fileName = new File(tempdir, 0 + fileName).toString();
-			category = XDMUtil.findCategory(fileName);
 			init = true;
 			int state2 = state;
 			state = REDIRECTING;
@@ -320,7 +316,6 @@ public class ConnectionManager extends Observable implements IXDMConstants,
 			info.progress = String.format("%.3f", prg);
 			info.state = this.state;
 			info.msg = this.status;
-			info.category = category;
 			info.tempdir = tempdir;
 			setChanged();
 			notifyObservers(info);
@@ -787,8 +782,7 @@ public class ConnectionManager extends Observable implements IXDMConstants,
 	}
 
 	public synchronized Credential getCreditential() {
-
-		String a[] = AuthDialog.getAuth();
+		String a[] = Dialog.auth();
 		if (a == null) {
 			creditential = null;
 			return null;
@@ -932,9 +926,7 @@ public class ConnectionManager extends Observable implements IXDMConstants,
 		System.out.println(uri.getRawSchemeSpecificPart());
 		ConnectionManager mgr = new ConnectionManager(url, "gfgd", "g:/tst",
 				"g:/tst", null, null);
-		DownloadWindow d = new DownloadWindow(mgr);
-		mgr.addObserver(d);
-		d.showWindow();
+		Dialog.download(mgr);
 		mgr.start();
 		// Thread.sleep(2000);
 		// System.out

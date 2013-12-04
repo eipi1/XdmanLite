@@ -37,7 +37,7 @@ public class DownloadListItem extends Observable implements Observer,
 		Serializable {
 	private static final long serialVersionUID = -4925098929484510725L;
 	IDownloadListener listener;
-	String cookies;
+	public String cookies;
 
 	void setCallback(ConnectionManager mgr, Observer o, IDownloadListener l) {
 		this.mgr = mgr;
@@ -49,14 +49,19 @@ public class DownloadListItem extends Observable implements Observer,
 	public DownloadListItem() {
 	}
 
-	String filename;
-	boolean q;
+	public String filename;
+	public boolean q;
 	int state;
-	String status, timeleft, transferrate, lasttry, description, dateadded,
-			saveto, type, url, size, tempdir = "";
+	String status, timeleft, transferrate;
+	public String lasttry;
+	String description;
+	public String dateadded;
+	public String saveto;
+	public String url;
+	String size;
+	String tempdir = "";
 	transient ConnectionManager mgr;
-	transient JFrame window;
-	transient Icon icon;
+	public transient JFrame window;
 	public HashMap<String, String> extra;
 
 	// this method will be called by connection manager
@@ -71,7 +76,6 @@ public class DownloadListItem extends Observable implements Observer,
 		this.transferrate = info.speed;
 		this.url = info.url;
 		this.size = info.length;
-		this.type = info.category;
 		this.state = info.state;
 		if (info.state == IXDMConstants.COMPLETE
 				|| info.state == IXDMConstants.STOPPED
@@ -91,7 +95,6 @@ public class DownloadListItem extends Observable implements Observer,
 		if (info.state == IXDMConstants.REDIRECTING) {
 			tempdir = info.tempdir;
 			filename = info.file;
-			icon = IconUtil.getIcon(XDMUtil.findCategory(filename));
 			if (listener != null)
 				listener.downloadStateChanged();
 		}

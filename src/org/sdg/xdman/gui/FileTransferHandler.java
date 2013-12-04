@@ -60,7 +60,7 @@ public class FileTransferHandler extends TransferHandler {
 				values = new Object[rows.length];
 				for (int i = 0; i < rows.length; i++) {
 					int index = table.convertRowIndexToModel(rows[i]);
-					DownloadListItem item = Main.list.get(index);
+					DownloadListItem item = Main.downloadList.get(index);
 					File file = new File(item.saveto, item.filename);
 					values[i] = file;// table.getValueAt(rows[i], 0);
 				}

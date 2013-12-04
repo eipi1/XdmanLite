@@ -23,7 +23,6 @@ package org.sdg.xdman.gui;
 import java.awt.AWTException;
 import java.awt.CheckboxMenuItem;
 import java.awt.Desktop;
-import java.awt.Dimension;
 import java.awt.Menu;
 import java.awt.MenuItem;
 import java.awt.PopupMenu;
@@ -34,13 +33,9 @@ import java.awt.datatransfer.Clipboard;
 import java.awt.datatransfer.StringSelection;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
-import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.URI;
 import java.net.URL;
@@ -53,71 +48,56 @@ import java.util.List;
 import java.util.Observable;
 import java.util.Observer;
 
-import javax.swing.DefaultListModel;
-import javax.swing.Icon;
 import javax.swing.ImageIcon;
-import javax.swing.JButton;
 import javax.swing.JCheckBox;
-import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JMenuBar;
 import javax.swing.JOptionPane;
-import javax.swing.JTextField;
 
+import org.sdg.xdman.core.Config;
+import org.sdg.xdman.core.Dialog;
 import org.sdg.xdman.core.common.Authenticator;
 import org.sdg.xdman.core.common.ConnectionManager;
 import org.sdg.xdman.core.common.IXDMConstants;
 import org.sdg.xdman.core.common.UnsupportedProtocolException;
 import org.sdg.xdman.core.common.XDMConfig;
 import org.sdg.xdman.core.common.http.XDMHttpClient;
-import org.sdg.xdman.proxy.RequestHandler;
 import org.sdg.xdman.proxy.RequestIntercepter;
 import org.sdg.xdman.proxy.XDMProxyServer;
 import org.sdg.xdman.util.XDMUtil;
 import org.sdg.xdman.util.win.RegUtil;
 
-public class Main  implements Observer, IXDMQueue, Runnable, RequestIntercepter,
-		BatchDownloadListener,YoutubeMediaListener {
-	
+interface IXDMQueue {
+	public void startQ();
+	public void stopQ();
+	public void next();
+}
+
+public class Main  implements Observer, IXDMQueue, Runnable, RequestIntercepter, YoutubeMediaListener {
+	public static JFrame frame = new JFrame();
 	XDMProxyServer server;
-	static DownloadList list = null;// new DownloadList();
-	static String tempdir = System.getProperty("user.home");
-	static String destdir = tempdir;
-	static String appdir = tempdir;
-	IDownloadListener dlistener;
-	boolean stop = false;
-	static ConfigWindow cwin;
-	public static XDMConfig config;
-	boolean queue;
-	Thread scheduler;
-	DownloadCompleteDialog completeDlg;
-	ShutdownDlg sdlg;
-	public static ImageIcon icon;
+	public static DownloadList downloadList = null;
+	static IDownloadListener dlistener;
 	
+	boolean stop = false;
+	boolean queue;
+	public static ImageIcon icon;
 	Clipboard clipboard;
-	RefreshLinkDlg rdlg;
 	boolean haltPending = false;
+	// Dialogs
 	HelpDialog view;
-	BrowserIntDlg bint;
 	HttpTableModel httpModel;
 	HttpMonitorDlg httpDlg;
-	BatchDownloadDlg batchDlg;
-	BatchDlg bdlg;
+	
 	public static boolean proxyAttached = false;
 	JLabel queueLabel;
-	Icon qIcon;
-	YoutubeGrabberDlg ytgdlg;
-	static JFrame frame = new JFrame();
-
-	public static String version = "Version: 3.01 Build 15 (June 09, 2013)";
-	String updateURL = "http://xdm.sourceforge.net/update.php";
-	String homeURL = "http://xdm.sourceforge.net/";
+	private DownloadListItem queuedItem;
 
 	public Main(DownloadList list) {
 		icon = getIcon("icon.png");
-		Main.list = list;
-		this.dlistener = list;
+		downloadList = list;
+		dlistener = list;
 		Runtime.getRuntime().addShutdownHook(new Thread() {
 			public void run() {
 				shutdownHook();
@@ -125,6 +105,18 @@ public class Main  implements Observer, IXDMQueue, Runnable, RequestIntercepter,
 		});
 		// t = new Thread(this);
 		// t.start();
+		Config.config.addObserver(this);
+		if (Config.config.schedule) {
+			if (Config.scheduler == null) {
+				Config.scheduler = new Thread(this);
+				Config.scheduler.start();
+				return;
+			}
+			if (!Config.scheduler.isAlive()) {
+				Config.scheduler = new Thread(this);
+				Config.scheduler.start();
+			}
+		}
 	}
 
 	public static ImageIcon getIcon(String name) {
@@ -151,7 +143,7 @@ public class Main  implements Observer, IXDMQueue, Runnable, RequestIntercepter,
 	void shutdownHook() {
 		System.out.println("ShutdownHook...");
 		dlistener.downloadStateChanged();
-		config.save();
+		Config.config.save();
 		Authenticator.getInstance().save();
 		System.out.println("Stopping server");
 		server.stop();
@@ -163,96 +155,38 @@ public class Main  implements Observer, IXDMQueue, Runnable, RequestIntercepter,
 		}
 	}
 
-	void addDownload(String url, String fileName, String destdir,
-			String tempdir, DownloadList lst, XDMHttpClient client,
-			HashMap<String, String> extra, String cookies) {
-		DownloadListItem item = new DownloadListItem();
-		item.dateadded = new Date().toString();
-		item.lasttry = new Date().toString();
-		item.url = url;
-		item.extra = extra;
-		item.filename = fileName;// XDMUtil.getFileName(url);
-		item.icon = IconUtil.getIcon(XDMUtil.findCategory(item.filename));
-		item.saveto = destdir;
-		item.cookies = cookies;
-		list.add(item);
-		startDownload(url, fileName, destdir, tempdir, item, client,
-				item.extra, cookies);
-	}
-
-	void startDownload(String url, String fileName, String destdir,
-			String tempdir, DownloadListItem item, XDMHttpClient client,
-			HashMap<String, String> extra, String cookies) {
-		startDownload(url, fileName, destdir, tempdir, item, client, extra,
-				cookies, true);
-	}
-
-	void startDownload(String url, String fileName, String destdir,
-			String tempdir, DownloadListItem item, XDMHttpClient client,
-			HashMap<String, String> extra, String cookies, boolean fg) {
-		ConnectionManager c = new ConnectionManager(url, fileName, destdir,
-				tempdir, extra, config);
-		c.extra = extra;
-		c.setTimeOut(config.timeout);
-		c.setMaxConn(config.maxConn);
-		if (config.showDownloadPrgDlg && fg) {
-			DownloadWindow w = new DownloadWindow(c);
-			c.addObserver(w);
-			item.window = w.window;
-			w.showWindow();
-		}
-		//item.setCallback(c, model, dlistener);
-		item.addObserver(this);
-		//model.fireTableDataChanged();
-		dlistener.downloadStateChanged();
-		if (client == null) {
-			try {
-				c.start();
-			} catch (UnsupportedProtocolException e) {
-				//JOptionPane.showMessageDialog(frame, "Unsupported protocol");
-			}
-		} else {
-			try {
-				c.start(client);
-			} catch (UnsupportedProtocolException e) {
-				//JOptionPane.showMessageDialog(frame, "Unsupported protocol");
-			}
-		}
-	}
-
-
 	@SuppressWarnings("unchecked")
 	@Override
 	public void update(Observable o, Object obj) {
-		if (o == config) {
+		if (o == Config.config) {
 			System.out.println("Config updated...");
-			if (config.tempdir != null)
-				if (config.tempdir.length() > 0) {
-					if (new File(config.tempdir).exists()) {
-						Main.tempdir = config.tempdir;
+			if (Config.config.tempdir != null)
+				if (Config.config.tempdir.length() > 0) {
+					if (new File(Config.config.tempdir).exists()) {
+						Config.tempdir = Config.config.tempdir;
 					}
 				}
-			System.out.println("M_DESTDIR: " + destdir + "\nTEMpDIR: "
-					+ tempdir);
-			System.out.println("C_DESTDIR: " + config.destdir + "\nTEMpDIR: "
-					+ config.tempdir);
-			if (config.destdir != null)
-				if (config.destdir.length() > 0) {
-					if (new File(config.destdir).exists()) {
-						Main.destdir = config.destdir;
+			System.out.println("M_DESTDIR: " + Config.destdir + "\nTEMpDIR: "
+					+ Config.tempdir);
+			System.out.println("C_DESTDIR: " + Config.config.destdir + "\nTEMpDIR: "
+					+ Config.config.tempdir);
+			if (Config.config.destdir != null)
+				if (Config.config.destdir.length() > 0) {
+					if (new File(Config.config.destdir).exists()) {
+						Config.destdir = Config.config.destdir;
 					}
 				}
 
-			System.out.println("DESTDIR: " + destdir + "\nTEMpDIR: " + tempdir);
-			if (config.schedule) {
-				if (scheduler == null) {
-					scheduler = new Thread(this);
-					scheduler.start();
+			System.out.println("DESTDIR: " + Config.destdir + "\nTEMpDIR: " + Config.tempdir);
+			if (Config.config.schedule) {
+				if (Config.scheduler == null) {
+					Config.scheduler = new Thread(this);
+					Config.scheduler.start();
 					return;
 				}
-				if (!scheduler.isAlive()) {
-					scheduler = new Thread(this);
-					scheduler.start();
+				if (!Config.scheduler.isAlive()) {
+					Config.scheduler = new Thread(this);
+					Config.scheduler.start();
 				}
 			}
 		}
@@ -281,33 +215,22 @@ public class Main  implements Observer, IXDMQueue, Runnable, RequestIntercepter,
 			DownloadListItem item = (DownloadListItem) o;
 			if (item.state == IXDMConstants.COMPLETE) {
 				System.out.println("COMPLETE CALLBACK");
-				if (queue) {
-					next();
-				} else if (config.showDownloadCompleteDlg) {
-					if (completeDlg == null) {
-						completeDlg = new DownloadCompleteDialog();
-						completeDlg.setLocationRelativeTo(null);
-						completeDlg.setAlwaysOnTop(true);
-					}
-					completeDlg.setData(item.filename, item.url);
-					completeDlg.file_path = item.filename;
-					completeDlg.folder_path = item.saveto;
-					completeDlg.setVisible(true);
-				}
-				if (config.halt) {
-					if (config.haltTxt == null || config.haltTxt.length() < 1)
+				if (queue) next();
+				else if (Config.config.showDownloadCompleteDlg) Dialog.downloadComplete(item);
+				if (Config.config.halt) {
+					if (Config.config.haltTxt == null || Config.config.haltTxt.length() < 1)
 						return;
 					else
 						haltPending = true;
 				}
 				File file = new File(item.saveto, item.filename);
-				if (config.executeCmd) {
+				if (Config.config.executeCmd) {
 					//executeCommand(config.cmdTxt + " " + file);
 				}
-				if (config.hungUp) {
+				if (Config.config.hungUp) {
 					//hungUp(config.hungUpTxt);
 				}
-				if (config.antivir) {
+				if (Config.config.antivir) {
 					//virusScan(config.antivirTxt + " " + file);
 				}
 			}
@@ -317,45 +240,6 @@ public class Main  implements Observer, IXDMQueue, Runnable, RequestIntercepter,
 					item.q = false;
 					next();
 				}
-			}
-		}
-	}
-
-	public void setConfig(XDMConfig c) {
-		System.out.println("Setting config");
-		config = c;
-		if (config == null) {
-			config = new XDMConfig(new File(appdir, ".xdmconf"));
-		}
-		if (config.tempdir == null || config.tempdir.length() < 1) {
-			config.tempdir = tempdir;
-		}
-		if (config.destdir == null || config.destdir.length() < 1) {
-			config.destdir = destdir;
-		}
-		System.out.println(config);
-		if (config.tempdir != null)
-			if (config.tempdir.length() > 0) {
-				if (new File(config.tempdir).exists()) {
-					Main.tempdir = config.tempdir;
-				}
-			}
-		if (config.destdir != null)
-			if (config.destdir.length() > 0) {
-				if (new File(config.destdir).exists()) {
-					Main.destdir = config.destdir;
-				}
-			}
-		config.addObserver(this);
-		if (config.schedule) {
-			if (scheduler == null) {
-				scheduler = new Thread(this);
-				scheduler.start();
-				return;
-			}
-			if (!scheduler.isAlive()) {
-				scheduler = new Thread(this);
-				scheduler.start();
 			}
 		}
 	}
@@ -382,58 +266,54 @@ public class Main  implements Observer, IXDMQueue, Runnable, RequestIntercepter,
 	@Override
 	public void next() {
 		// TODO Auto-generated method stub
-		for (int i = 0; i < list.list.size(); i++) {
-			DownloadListItem item = list.list.get(i);
+		for (int i = 0; i < downloadList.list.size(); i++) {
+			DownloadListItem item = downloadList.list.get(i);
 			if (item.q) {
 				if (item.mgr == null) {
 					if (item.state != IXDMConstants.COMPLETE) {
 						if (item.tempdir.equals("")) {
-							startDownload(item.url, item.filename, item.saveto,
-									tempdir, item, null, item.extra,
+							SystemTrayMenu.startDownload(item.url, item.filename, item.saveto,
+									Config.tempdir, item, null, item.extra,
 									item.cookies, false);
 						} else {
 							ConnectionManager c = new ConnectionManager(
 									item.url, item.filename, item.saveto,
-									item.tempdir, item.extra, config);
-							c.setTimeOut(config.timeout);
-							c.setMaxConn(config.maxConn);
+									item.tempdir, item.extra, Config.config);
+							c.setTimeOut(Config.config.timeout);
+							c.setMaxConn(Config.config.maxConn);
 							//item.setCallback(c, model, dlistener);
 							item.addObserver(this);
 							c.resume();
 						}
-						//queuedItem = item;
-						if (qIcon == null) {
-							qIcon = getIcon("icon16.png");
-						}
-						queueLabel.setIcon(qIcon);
+						queuedItem = item;
 						return;
 					}
 				}
 			}
 		}
 		queue = false;
-		//queuedItem = null;
+		queuedItem = null;
 		queueLabel.setIcon(null);
 	}
 
 	@Override
 	public void run() {
-		while (config.schedule) {
+		while (Config.config.schedule) {
 			System.out.println("Scheduler running...");
 			long now = System.currentTimeMillis();
-			if (config.startDate != null && config.endDate != null) {
-				if (now > config.startDate.getTime()) {
-					if (now < config.endDate.getTime())
+			if (Config.config.startDate != null && Config.config.endDate != null) {
+				if (now > Config.config.startDate.getTime()) {
+					if (now < Config.config.endDate.getTime())
 						if (!queue)
 							startQ();
 				} else {
 					System.out.println("Date error " + "Now: " + now
-							+ " START: " + config.startDate.getTime()
-							+ " END: " + config.endDate.getTime()
-							+ (now > config.startDate.getTime()) + " "
-							+ (now < config.endDate.getTime()));
+							+ " START: " + Config.config.startDate.getTime()
+							+ " END: " + Config.config.endDate.getTime()
+							+ (now > Config.config.startDate.getTime()) + " "
+							+ (now < Config.config.endDate.getTime()));
 				}
-				if (config.endDate.getTime() < now) {
+				if (Config.config.endDate.getTime() < now) {
 					stopQ();
 					break;
 				}
@@ -531,12 +411,12 @@ public class Main  implements Observer, IXDMQueue, Runnable, RequestIntercepter,
 	}
 	
 	static boolean mod_xdm = false;
-	static boolean first_run = false;
+	
 
 	public static boolean attachProxy(boolean refresh) {
-		File exe = new File(tempdir, "xdm_net_helper.exe");
+		File exe = new File(Config.tempdir, "xdm_net_helper.exe");
 		try {
-			File tmp = new File(tempdir, "xdm_win_proxy_attach");
+			File tmp = new File(Config.tempdir, "xdm_win_proxy_attach");
 			InputStream in = Main.class.getResourceAsStream("/resource/xdm");
 			OutputStream out = new FileOutputStream(tmp);
 			byte buf[] = new byte[8192];
@@ -551,10 +431,10 @@ public class Main  implements Observer, IXDMQueue, Runnable, RequestIntercepter,
 			List<String> cmds = new ArrayList<String>();
 			cmds.add(exe.getAbsolutePath());
 			if (!refresh) {
-				cmds.add("http=http://localhost:" + config.port);
+				cmds.add("http=http://localhost:" + Config.config.port);
 			}
 			ProcessBuilder pb = new ProcessBuilder(cmds);
-			pb.directory(new File(tempdir));
+			pb.directory(new File(Config.tempdir));
 			Process proc = pb.start();
 			proc.waitFor();
 			if (proc.exitValue() != 0) {
@@ -569,12 +449,6 @@ public class Main  implements Observer, IXDMQueue, Runnable, RequestIntercepter,
 		return true;
 	}
 
-	
-
-	
-	
-	
-
 	HelpDialog getHTMLViwer() {
 		HashMap<String, URL> map = new HashMap<String, URL>();
 		map.put("Browser Integration", getClass().getResource(
@@ -586,62 +460,6 @@ public class Main  implements Observer, IXDMQueue, Runnable, RequestIntercepter,
 		HelpDialog hlp = new HelpDialog();
 		hlp.addPages(map);
 		return hlp;
-	}
-
-	@Override
-	public void download(List<BatchItem> list, boolean startQ) {
-		for (int i = 0; i < list.size(); i++) {
-			BatchItem item = list.get(i);
-			DownloadListItem ditem = new DownloadListItem();
-			ditem.url = item.url;
-			ditem.saveto = item.dir;
-			ditem.filename = item.fileName;
-			ditem.dateadded = new Date().toString();
-			ditem.lasttry = new Date().toString();
-			ditem.q = true;
-			String user = item.user;
-			String pass = item.pass;
-			HashMap<String, String> extra = null;
-			if (!(user == null || pass == null)) {
-				if (user.length() > 0) {
-					try {
-						if (extra == null) {
-							extra = new HashMap<String, String>();
-						}
-						extra.put("USER", user);
-						extra.put("PASS", pass);
-					} catch (Exception err) {
-					}
-				}
-			}
-			ditem.extra = extra;
-			ditem.icon = IconUtil.getIcon(XDMUtil.findCategory(ditem.filename));
-			Main.list.add(ditem);
-		}
-		if (startQ)
-			startQ();
-	}
-
-	public void initBatchDownload(List<String> list, String user, String pass) {
-		System.out.println("Batch");
-		if (list == null || list.size() < 1) {
-			return;
-		}
-		if (batchDlg == null) {
-			batchDlg = new BatchDownloadDlg();
-		}
-		batchDlg.setLocationRelativeTo(null);
-		List<BatchItem> blist = new ArrayList<BatchItem>();
-		for (int i = 0; i < list.size(); i++) {
-			BatchItem item = new BatchItem();
-			item.url = list.get(i);
-			item.fileName = XDMUtil.getFileName(item.url);
-			item.user = user;
-			item.pass = pass;
-			blist.add(item);
-			System.out.println(item.url);
-		}
-		batchDlg.showDialog(blist, config.destdir, this);
 	}
 
 	public void mediaCaptured(ArrayList<String> list) {
@@ -662,16 +480,9 @@ public class Main  implements Observer, IXDMQueue, Runnable, RequestIntercepter,
 	}
 
 	public static void main(String[] args) {
-		// System.out.println(System.getProperty("java.home"));
-		// System.out.println(System.getProperty("java.class.path"));
-		File configFile = new File(appdir, ".xdmconf");
-		first_run = !configFile.exists();
-		config = XDMConfig.load(configFile);
-		if (config.tcpBuf <= 8192) {
-			config.tcpBuf = 8192;
-		}
-		showInfo = (!configFile.exists());
-		XDMProxyServer server = new XDMProxyServer(null, config, null, null, null);
+		Config.init();
+		Main main = new Main(null);
+		XDMProxyServer server = new XDMProxyServer(null, Config.config, null, null, null);
 		if (!server.init()) {
 			JOptionPane.showMessageDialog(frame,"Advanced Browser Integration Module could not be started.");
 			return;
@@ -685,17 +496,12 @@ public class Main  implements Observer, IXDMQueue, Runnable, RequestIntercepter,
 		 * "Advanced Browser Integration and Firefox Integration may not work");
 		 * }
 		 */
-		DownloadList list = new DownloadList(appdir);
+		DownloadList list = new DownloadList(Config.appdir);
 		IDownloadListener l = list;
 		/*
-		setConfig(config);
-		w.mmodel = new MediaTableModel(w);
-		w.setList(list, l);
-		if (!min)
-			w.setVisible(true);
 		w.showInfo = showInfo;*/
 		Authenticator a = Authenticator.getInstance();
-		a.load(new File(appdir, "sites.conf"));
+		a.load(new File(Config.appdir, "sites.conf"));
 		startServer();
 		System.out.println();
 		System.out.println(args.length);
@@ -704,12 +510,12 @@ public class Main  implements Observer, IXDMQueue, Runnable, RequestIntercepter,
 			public void run() {
 				String path = getJarPath();
 				// first_run = true;
-				if (first_run) {
+				if (Config.first_run) {
 					// boolean win = File.separatorChar == '\\';
 					// if (win) {
 					// w.eanableAutoStartWin();
 					// }
-					config.jarPath = path;
+					Config.config.jarPath = path;
 					//w.showBrowserIntegrationDlg();
 					//w.runScriptWin();
 					if (File.separatorChar == '\\') {
@@ -724,9 +530,9 @@ public class Main  implements Observer, IXDMQueue, Runnable, RequestIntercepter,
 					}
 				} else {
 					String jarPath = path;
-					System.out.println("Old path: " + config.jarPath
+					System.out.println("Old path: " + Config.config.jarPath
 							+ " Current Path: " + jarPath);
-					config.jarPath = jarPath;
+					Config.config.jarPath = jarPath;
 				}
 				if (File.separatorChar == '\\') {
 					//w.createWinLink(path);
@@ -734,7 +540,7 @@ public class Main  implements Observer, IXDMQueue, Runnable, RequestIntercepter,
 					File bak = new File(System.getProperty("user.home"), "reg-bak.reg");
 					if (RegUtil.takeBackup(bak)) {
 						System.out.println("Backup successfull");
-						if (config.attachProxy) {
+						if (Config.config.attachProxy) {
 							System.out.println("Attaching Proxy...");
 							//w.proxyAttached = w.attachProxy(false);
 							//config.attachProxy = w.proxyAttached;
@@ -762,7 +568,6 @@ public class Main  implements Observer, IXDMQueue, Runnable, RequestIntercepter,
 	}
 	
 	static SystemTrayMenu trayPop;
-	static boolean showInfo;
 	static SystemTray tray;
 	static TrayIcon trayIcon;
 	
@@ -844,71 +649,9 @@ class SystemTrayMenu extends PopupMenu implements ActionListener{
 		if (str.equals("Add URL")) {
 			//addURL(null, null, null, null);
 		}
-		if (str.equals("Download Later")) {
-			DownloadFileInfoDialog dfi = (DownloadFileInfoDialog) e.getSource();
-			if (dfi.interceptor != null) {
-				((RequestHandler) dfi.interceptor).intercept = true;
-				synchronized (dfi) {
-					dfi.notifyAll();
-				}
-			}
-			String url = dfi.getURL();
-			String user = dfi.getUser();
-			String pass = dfi.getPass();
-			HashMap<String, String> extra = dfi.extra;
-			if (user.length() > 0) {
-				try {
-					if (extra == null) {
-						extra = new HashMap<String, String>();
-					}
-					extra.put("USER", user);
-					extra.put("PASS", pass);
-				} catch (Exception err) {
-				}
-			}
-			// addDownload(url, file, tempdir, list, dfi.client, extra,
-			// dfi.cookies);
-			DownloadListItem item = new DownloadListItem();
-			item.dateadded = new Date().toString();
-			item.lasttry = new Date().toString();
-			item.q = true;
-			item.url = url;
-			item.extra = extra;
-			item.filename = dfi.getFile();// XDMUtil.getFileName(url);
-			item.icon = IconUtil.getIcon(XDMUtil.findCategory(item.filename));
-			item.saveto = dfi.getDir();// destdir;
-			item.cookies = dfi.cookies;
-		}
-		if (str.equals("Download Now")) {
-			DownloadFileInfoDialog dfi = (DownloadFileInfoDialog) e.getSource();
-			if (dfi.interceptor != null) {
-				((RequestHandler) dfi.interceptor).intercept = true;
-				synchronized (dfi) {
-					dfi.notifyAll();
-				}
-			}
-			String url = dfi.getURL();
-			String file = dfi.getFile();
-			String dir = dfi.getDir();
-			String user = dfi.getUser();
-			String pass = dfi.getPass();
-			HashMap<String, String> extra = dfi.extra;
-			if (user.length() > 0) {
-				try {
-					if (extra == null) {
-						extra = new HashMap<String, String>();
-					}
-					extra.put("USER", user);
-					extra.put("PASS", pass);
-				} catch (Exception err) {
-				}
-			}
-			//addDownload(url, file, dir, tempdir, list, dfi.client, extra, dfi.cookies);
-		}
-		if (str.equals("Manual Configure")) {
-			ConfigWindow cwin = new ConfigWindow(Main.config, Main.frame);
-			cwin.setVisible(true);
-		}
+		if (str.equals("Download Later")) Dialog.downloadLater(e);
+		if (str.equals("Download Now")) Dialog.downloadNow(e);
+		
 		if (str.equals("Start Queue")) {
 			menuMap.get("Start Queue").setEnabled(false);
 			menuMap.get("Stop Queue").setEnabled(true);
@@ -920,96 +663,78 @@ class SystemTrayMenu extends PopupMenu implements ActionListener{
 			//stopQ();
 		}
 		
-		if(str.equals("Auto Start on Startup"))
-			setAutoStart(((CheckboxMenuItem)menuMap.get("Auto Start on Startup")).getState());
-		
-		if (str.equals("Make Shortcut"))
-			if (File.separatorChar == '\\') 
-				winCreateLink();
-			 else 
-				linuxCreateLink();
-
-		if (str.equals("About")) {
-			AboutDlg abtDlg = new AboutDlg();
-			abtDlg.setVisible(true);
-		}
-		if (str.equals("Exit"))
-			System.exit(0);
-		
-		if (str.equals("Test Browser")) {
-			JTextField url = new JTextField("http://localhost:" + Main.config.port + "/test");
-			url.setEditable(false);
-			JButton copy = new JButton("Copy");
-			Object arr[] = {
-					"To check if XDM is synchronized with your browser\n"
-							+ "Paste/type this URL in your browser.\n",
-					url,
-					copy,
-					"If its not synchronized\n"
-							+ "You have to configure the browser.\n"
-							+ "If you have configured it already then try restarting it again." };
-			JOptionPane.showOptionDialog(Main.frame, arr, "Test Browser",
-					JOptionPane.DEFAULT_OPTION, JOptionPane.INFORMATION_MESSAGE,
-					null, null, null);
-		}
-		
-		if (str.equals("Advanced Browser Integration")) {
-			showInfo();
-		}
-		if (str.equals("Firefox Integration")) {
-			DefaultListModel ffmodel = new DefaultListModel();
-			ffmodel.add(0, "http://localhost:" + Main.config.port + "/xdmff.xpi");
-			FFIntDlg ffdlg = new FFIntDlg(ffmodel, Main.frame);
-			ffdlg.setVisible(true);
-		}
-		if (str.equals("Browser Integration")) {
-			//showBrowserIntegrationDlg();
-		}
-		if (str.equals("Capturing downloads")) {
-		}
-		if (str.equals("Capturing videos")) {
-		}
-		if (str.equals("Auto Configure")) {
-			showInfo();
-		}
-		if (str.equals("Run XDM on startup")) {
-			JCheckBox chk = (JCheckBox) e.getSource();
-			//setAutoStart(chk.isSelected());
-			System.out.println(chk.isSelected());
-		}
+		if (str.equals("Test Browser")) Dialog.testBrowser();
+		//------------------------------------------------------------------------------
+		if(str.equals("Auto Start on Startup")) Config.setAutoStart(((CheckboxMenuItem)
+				menuMap.get("Auto Start on Startup")).getState());
+		if (str.equals("Make Shortcut")) Config.makeLink();
+		if (str.equals("Manual Configure")) Dialog.config();
+		if (str.equals("Firefox Integration")) Dialog.fireFoxIntegration();
+		if (str.equals("Browser Integration")) Dialog.browserIntegration();
+		if (str.equals("Advanced Browser Integration")) showInfo();
+		if (str.equals("Auto Configure")) showInfo();
+		if (str.equals("Capturing downloads"));
+		if (str.equals("Capturing videos"));
+		//------------------------------------------------------------------------------
+		if (str.equals("About")) Dialog.about();
+		if (str.equals("Exit")) System.exit(0);
 	}
 	
 	void addURL(String url, XDMHttpClient client, HashMap<String, String> map, String cookies) {
 		addURL(url, client, map, cookies, null);
 	}
 	
-	void addURL(String url, XDMHttpClient client, HashMap<String, String> map,
-			String cookies, Object invoker) {
+	void addURL(String url, XDMHttpClient client, HashMap<String, String> map, String cookies, Object invoker) {
 		System.out.println("Called");
-		DownloadFileInfoDialog dlg = new DownloadFileInfoDialog(this, this, Main.config);
-		dlg.setURL(url);
-		dlg.setDir(Main.config.destdir);
-		dlg.client = client;
-		dlg.extra = map;
-		dlg.cookies = cookies;
-		dlg.setAlwaysOnTop(true);
-		dlg.showDlg();
-		if (Main.config.allowbrowser) {
-			if (invoker != null) {
-				dlg.interceptor = invoker;
-				synchronized (dlg) {
-					try {
-						dlg.wait();
-						System.out.println("Returned Intercept? "
-								+ ((RequestHandler) invoker).intercept);
-					} catch (InterruptedException e) {
-						e.printStackTrace();
-					}
-				}
+		Dialog.downloadFileInfo(this, this, url, client, map, cookies, invoker);
+	}
+	
+	void addDownload(String url, String fileName, String destdir,
+			String tempdir, DownloadList lst, XDMHttpClient client,
+			HashMap<String, String> extra, String cookies) {
+		DownloadListItem item = new DownloadListItem();
+		item.dateadded = new Date().toString();
+		item.lasttry = new Date().toString();
+		item.url = url;
+		item.extra = extra;
+		item.filename = fileName;// XDMUtil.getFileName(url);
+		item.saveto = destdir;
+		item.cookies = cookies;
+		Main.downloadList.add(item);
+		startDownload(url, fileName, destdir, tempdir, item, client,
+				item.extra, cookies);
+	}
+
+	public static void startDownload(String url, String fileName, String destdir,
+			String tempdir, DownloadListItem item, XDMHttpClient client,
+			HashMap<String, String> extra, String cookies) {
+		startDownload(url, fileName, destdir, tempdir, item, client, extra,
+				cookies, true);
+	}
+
+	static void startDownload(String url, String fileName, String destdir,
+			String tempdir, DownloadListItem item, XDMHttpClient client,
+			HashMap<String, String> extra, String cookies, boolean fg) {
+		ConnectionManager c = new ConnectionManager(url, fileName, destdir,
+				tempdir, extra, Config.config);
+		c.extra = extra;
+		c.setTimeOut(Config.config.timeout);
+		c.setMaxConn(Config.config.maxConn);
+		if (Config.config.showDownloadPrgDlg && fg) Dialog.download(c, item);
+		//item.setCallback(c, model, dlistener);
+		//item.addObserver(this);
+		Main.dlistener.downloadStateChanged();
+		if (client == null) {
+			try {
+				c.start();
+			} catch (UnsupportedProtocolException e) {
+				JOptionPane.showMessageDialog(Main.frame, "Unsupported protocol");
 			}
 		} else {
-			if (invoker != null) {
-				((RequestHandler) invoker).intercept = true;
+			try {
+				c.start(client);
+			} catch (UnsupportedProtocolException e) {
+				JOptionPane.showMessageDialog(Main.frame, "Unsupported protocol");
 			}
 		}
 	}
@@ -1026,12 +751,12 @@ class SystemTrayMenu extends PopupMenu implements ActionListener{
 					JOptionPane.OK_CANCEL_OPTION,
 					JOptionPane.INFORMATION_MESSAGE, null, null, null) == JOptionPane.OK_OPTION) {
 				if (enableCapture.isSelected()) {
-					Main.config.attachProxy = true;
+					Config.config.attachProxy = true;
 					if (Main.proxyAttached) {
 						return;
 					} else {
 						if (!RegUtil.takeBackup(bak)) {
-							Main.config.attachProxy = false;
+							Config.config.attachProxy = false;
 							Main.proxyAttached = false;
 							JOptionPane
 									.showMessageDialog(null,
@@ -1039,14 +764,14 @@ class SystemTrayMenu extends PopupMenu implements ActionListener{
 							return;
 						}
 						if (!Main.attachProxy(false)) {
-							Main.config.attachProxy = false;
+							Config.config.attachProxy = false;
 							Main.proxyAttached = false;
 							JOptionPane
 									.showMessageDialog(null,
 											"Auto configuration Failed.\nPlease try manual configuration");
 							return;
 						} else {
-							Main.config.attachProxy = true;
+							Config.config.attachProxy = true;
 							Main.proxyAttached = true;
 						}
 					}
@@ -1060,12 +785,12 @@ class SystemTrayMenu extends PopupMenu implements ActionListener{
 					if (!restore_main_bak) {
 						RegUtil.restore(bak);
 						Main.proxyAttached = false;
-						Main.config.attachProxy = false;
+						Config.config.attachProxy = false;
 						Main.attachProxy(true);
 					} else {
 						RegUtil.restore(main_bak);
 						Main.proxyAttached = false;
-						Main.config.attachProxy = false;
+						Config.config.attachProxy = false;
 						Main.attachProxy(true);
 					}
 
@@ -1078,298 +803,17 @@ class SystemTrayMenu extends PopupMenu implements ActionListener{
 			try {
 				if (Desktop.isDesktopSupported()) {
 					Desktop.getDesktop().browse(
-							new URI("http://localhost:" + Main.config.port
+							new URI("http://localhost:" + Config.config.port
 									+ "/help/index.html"));
 				} else {
 					JOptionPane.showMessageDialog(Main.frame,
 							"Type this address in your browser:\n"
-									+ "http://localhost:" + Main.config.port
+									+ "http://localhost:" + Config.config.port
 									+ "/help/index.html");
 				}
 			} catch (Exception err) {
 				err.printStackTrace();
 			}
-		}
-	}
-	
-	
-
-	static private void createProcess(String cmd) {
-		try {
-			Runtime.getRuntime().exec(cmd);
-		} catch (Exception e) {
-			e.printStackTrace();
-		}
-	}
-	
-	private void virusScan(String antivirTxt) {
-		createProcess(antivirTxt);
-	}
-
-	private void hungUp(String hungUpTxt) {
-		createProcess(hungUpTxt);
-	}
-
-	private void executeCommand(String cmdTxt) {
-		createProcess(cmdTxt);
-	}
-	
-	/*
-	 *  Shutdown on Download Complete
-	 */
-	void shutdownComputer(String cmd) {
-		ShutdownDlg sdlg = new ShutdownDlg();
-		sdlg.start(cmd);
-	}
-	
-	/*
-	 *  Auto Start Features
-	 */
-	void setAutoStart(boolean on) {
-		boolean win = File.separatorChar == '\\';
-		if (on) {
-			if (win)
-				eanableAutoStartWin();
-			else {
-				if (!enableAutoStartLinux()) {
-					JOptionPane.showMessageDialog(Main.frame,
-							"Please Manually Add XDM at startup");
-				}
-			}
-		} else {
-			if (win)
-				disableAutoStartWin();
-			else {
-				disableAutoStartLinux();
-			}
-		}
-	}
-
-	boolean disableAutoStartLinux() {
-		String autoStartDirs[] = { ".config/autostart", ".kde/Autostart",
-				".kde/autostart", ".config/Autostart", ".kde4/Autostart" };
-		File home = new File(System.getProperty("user.home"));
-		File autoStartDir = null;
-		for (int i = 0; i < autoStartDirs.length; i++) {
-			autoStartDir = new File(home, autoStartDirs[i]);
-			if (!autoStartDir.exists()) {
-				autoStartDir = null;
-			} else {
-				// createLinuxLink(autoStartDir.getAbsolutePath());
-				File file = new File(autoStartDir, "xdman.desktop");
-				if (file.exists()) {
-					if (file.delete()) {
-						return true;
-					}
-				}
-			}
-		}
-		return false;
-	}
-
-	boolean enableAutoStartLinux() {
-		String autoStartDirs[] = { ".config/autostart", ".kde/Autostart",
-				".kde/autostart", ".config/Autostart", ".kde4/Autostart" };
-		File home = new File(System.getProperty("user.home"));
-		File autoStartDir = null;
-		for (int i = 0; i < autoStartDirs.length; i++) {
-			autoStartDir = new File(home, autoStartDirs[i]);
-			if (!autoStartDir.exists()) {
-				autoStartDir = null;
-			} else {
-				createLinuxLink(autoStartDir.getAbsolutePath(), true);
-				return true;
-			}
-		}
-		return false;
-	}
-
-	boolean eanableAutoStartWin() {
-		try {
-			System.out.println("Adding startup entry");
-			String jarFolder = Main.getJarPath();
-			String jarfile = new File(jarFolder, "xdman.jar").getAbsolutePath();
-			File file = new File(System.getProperty("user.home"), "startup.vbs");
-			OutputStream out = new FileOutputStream(file);
-			BufferedReader in = new BufferedReader(new InputStreamReader(
-					Main.class.getResourceAsStream("/script/startup_add.txt")));
-			while (true) {
-				String ln = in.readLine();
-				if (ln == null)
-					break;
-				String l2 = ln.replace("<JAR_PATH>", jarfile);
-				String l3 = l2.replace("<ICON_LOCATION>", new File(jarFolder,
-						"icon.ico").getAbsolutePath())
-						+ "\r\n";
-				out.write(l3.getBytes());
-			}
-			out.close();
-			in.close();
-			createProcess("WScript.exe \"" + file.getAbsolutePath() + "\"");
-		} catch (Exception e) {
-			System.out.println(e);
-			return false;
-		}
-		return true;
-	}
-	
-	boolean disableAutoStartWin() {
-		try {
-			InputStream in = getClass().getResourceAsStream("/script/startup_del.txt");
-			File remScript = new File(System.getProperty("user.home"), "rem.vbs");
-			OutputStream out = new FileOutputStream(remScript);
-			byte b[] = new byte[1024];
-			int x = in.read(b);
-			out.write(b, 0, x);
-			out.close();
-			Runtime.getRuntime().exec("wscript \"" + remScript.getAbsolutePath() + "\"");
-		} catch (Exception e) {
-			return false;
-		}
-		return true;
-	}
-
-	/*
-	 *  Making Shortcut
-	 */
-	
-	JFileChooser fc;
-	void winCreateLink() {
-		try {
-			if (fc == null) {
-				fc = new JFileChooser();
-				fc.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-			}
-			if (fc.showSaveDialog(Main.frame) == JFileChooser.APPROVE_OPTION) {
-				String desktopFile = fc.getSelectedFile().getAbsolutePath();
-				createWinLink(desktopFile);
-			}
-		} catch (Exception e) {
-			// TODO: handle exception
-			e.printStackTrace();
-		}
-	}
-	
-	void createWinLink(String targetFile) {
-		try {
-			System.out.println("Creating shortcut at: " + targetFile);
-			String jarFolder = Main.getJarPath();
-			String jarfile = new File(jarFolder, "xdman.jar").getAbsolutePath();
-			File file = new File(System.getProperty("user.home"), "link.vbs");
-			OutputStream out = new FileOutputStream(file);
-			BufferedReader in = new BufferedReader(new InputStreamReader(
-					Main.class.getResourceAsStream("/script/link.txt")));
-			while (true) {
-				String ln = in.readLine();
-				if (ln == null)
-					break;
-				String l1 = ln.replace("<TARGET_LOCATION>", targetFile);
-				String l2 = l1.replace("<JAR_PATH>", jarfile);
-				String l3 = l2.replace("<ICON_LOCATION>", new File(jarFolder,
-						"icon.ico").getAbsolutePath())
-						+ "\r\n";
-				out.write(l3.getBytes());
-			}
-			out.close();
-			in.close();
-			createProcess("WScript.exe \"" + file.getAbsolutePath() + "\"");
-		} catch (Exception e) {
-			System.out.println(e);
-		}
-	}
-	
-	void linuxCreateLink() {
-		try {
-			if (fc == null) {
-				fc = new JFileChooser();
-				fc.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-			}
-			if (fc.showSaveDialog(Main.frame) == JFileChooser.APPROVE_OPTION) {
-				String desktopFile = fc.getSelectedFile().getAbsolutePath();
-				createLinuxLink(desktopFile, false);
-			}
-		} catch (Exception e) {
-			// TODO: handle exception
-			e.printStackTrace();
-		}
-	}
-	
-	void createLinuxLink(String target, boolean min) {
-		try {
-			StringBuffer buf = new StringBuffer();
-			buf.append("[Desktop Entry]\n");
-			buf.append("Encoding=UTF-8\n");
-			buf.append("Version=1.0\n");
-			buf.append("Type=Application\n");
-			buf.append("Terminal=false\n");
-			String jarPath = Main.getJarPath();
-			buf.append("Exec=java -jar '"
-					+ new File(jarPath, "xdman.jar").getAbsolutePath() + "'"
-					+ (min ? " -m" : "") + "\n");
-			buf.append("Name=Xtreme Download Manager\n");
-			buf.append("Icon="
-					+ new File(jarPath, "icon.png").getAbsolutePath() + "\n");
-			File desktop = new File(target, "xdman.desktop");
-			OutputStream out = new FileOutputStream(desktop);
-			out.write(buf.toString().getBytes());
-			out.close();
-			desktop.setExecutable(true);
-		} catch (Exception e) {
-			JOptionPane.showMessageDialog(Main.frame, "Error creating shortcut");
-		}
-	}
-	
-	void runScriptWin() {
-		try {
-			System.out.println("Adding Desktop entry");
-			String jarFolder = Main.getJarPath();
-			String jarfile = new File(jarFolder, "xdman.jar").getAbsolutePath();
-			File file = new File(System.getProperty("user.home"),
-					"desktop_shortcut.vbs");
-			OutputStream out = new FileOutputStream(file);
-			BufferedReader in = new BufferedReader(
-					new InputStreamReader(
-							Main.class
-									.getResourceAsStream("/script/desktop_shortcut.txt")));
-			while (true) {
-				String ln = in.readLine();
-				if (ln == null)
-					break;
-				String l2 = ln.replace("<JAR_PATH>", jarfile);
-				String l3 = l2.replace("<ICON_LOCATION>", new File(jarFolder,
-						"icon.ico").getAbsolutePath())
-						+ "\r\n";
-				out.write(l3.getBytes());
-			}
-			out.close();
-			in.close();
-			createProcess("WScript.exe \"" + file.getAbsolutePath() + "\"");
-		} catch (Exception e) {
-			System.out.println(e);
-		}
-		try {
-			System.out.println("Adding Prgrams entry");
-			String jarFolder = Main.getJarPath();
-			String jarfile = new File(jarFolder, "xdman.jar").getAbsolutePath();
-			File file = new File(System.getProperty("user.home"), "programs_shortcut.vbs");
-			OutputStream out = new FileOutputStream(file);
-			BufferedReader in = new BufferedReader(
-				new InputStreamReader(Main.class.getResourceAsStream("/script/programs_shortcut.txt")));
-			while (true) {
-				String ln = in.readLine();
-				if (ln == null)
-					break;
-				String l2 = ln.replace("<JAR_PATH>", jarfile);
-				String l3 = l2.replace("<ICON_LOCATION>", new File(jarFolder,
-						"icon.ico").getAbsolutePath())
-						+ "\r\n";
-				out.write(l3.getBytes());
-			}
-			out.close();
-			in.close();
-			createProcess("WScript.exe \"" + file.getAbsolutePath() + "\"");
-		} catch (Exception e) {
-			System.out.println(e);
 		}
 	}
 }

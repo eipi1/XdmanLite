@@ -27,7 +27,6 @@ import java.io.FileOutputStream;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.File;
-import org.sdg.xdman.util.XDMUtil;
 
 import org.sdg.xdman.core.common.IXDMConstants;
 
@@ -50,7 +49,7 @@ public class DownloadList implements IXDMConstants, Serializable,
 		int k = 0;
 		for (int i = 0; i < list.size(); i++) {
 			DownloadListItem item = list.get(i);
-			if (sameType(item.type) && sameState(item.state)) {
+			if (sameState(item.state)) {
 				if (k == index)
 					return item;
 				k++;
@@ -70,7 +69,7 @@ public class DownloadList implements IXDMConstants, Serializable,
 		int k = 0;
 		for (int i = 0; i < list.size(); i++) {
 			DownloadListItem item = list.get(i);
-			if (sameType(item.type) && sameState(item.state)) {
+			if (sameState(item.state)) {
 				if (k == index)
 					list.remove(i);
 				k++;
@@ -89,7 +88,7 @@ public class DownloadList implements IXDMConstants, Serializable,
 		int k = 0;
 		for (int i = 0; i < list.size(); i++) {
 			DownloadListItem item = list.get(i);
-			if (sameType(item.type) && sameState(item.state)) {
+			if (sameState(item.state)) {
 				k++;
 			}
 		}
@@ -112,7 +111,7 @@ public class DownloadList implements IXDMConstants, Serializable,
 		int k = 0;
 		for (int i = 0; i < list.size(); i++) {
 			DownloadListItem itm = list.get(i);
-			if (sameType(itm.type) && sameState(itm.state)) {
+			if (sameState(itm.state)) {
 				if (item.equals(itm)) {
 					return k;
 				}
@@ -181,7 +180,6 @@ public class DownloadList implements IXDMConstants, Serializable,
 		}
 		for (int i = 0; i < list.size(); i++) {
 			DownloadListItem item = list.get(i);
-			item.icon = IconUtil.getIcon(XDMUtil.findCategory(item.filename));
 			if (!(item.state == IXDMConstants.COMPLETE || item.state == IXDMConstants.FAILED)) {
 				item.state = IXDMConstants.STOPPED;
 				item.status = "Stopped";

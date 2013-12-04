@@ -40,7 +40,6 @@ public class DownloadInfo {
 	public int state;
 	public String msg;
 	public String progress;
-	public String category;
 	public String tempdir;
 	public File path;
 }

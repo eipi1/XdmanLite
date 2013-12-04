@@ -27,7 +27,9 @@ import java.io.File;
 import java.io.IOException;
 import java.net.URL;
 import java.util.HashMap;
+import java.util.Iterator;
 
+import javax.swing.AbstractListModel;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JEditorPane;
@@ -163,6 +165,32 @@ public class HelpDialog extends JFrame implements ListSelectionListener,
 		HelpDialog d = new HelpDialog();
 		d.addPages(map);
 		d.setVisible(true);
+	}
+
+}
+
+class HelpListModel extends AbstractListModel {
+
+	private static final long serialVersionUID = 5679536364566414367L;
+
+	HashMap<String, URL> map = new HashMap<String, URL>();
+
+	public URL getLinkURL(String pageName) {
+		return map.get(pageName);
+	}
+
+	public Iterator<String> listPages() {
+		return map.keySet().iterator();
+	}
+
+	@Override
+	public Object getElementAt(int r) {
+		return map.keySet().toArray()[r] + "";
+	}
+
+	@Override
+	public int getSize() {
+		return map.size();
 	}
 
 }

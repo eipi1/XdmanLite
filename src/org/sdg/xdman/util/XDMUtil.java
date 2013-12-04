@@ -92,36 +92,6 @@ public class XDMUtil implements IXDMConstants {
 	static String prog[] = { ".exe", ".msi", ".bin", ".sh", ".deb", ".cab",
 			".cpio", ".dll", ".jar" };
 
-	public static String findCategory(String filename) {
-		String file = filename.toLowerCase();
-		for (int i = 0; i < doc.length; i++) {
-			if (file.endsWith(doc[i])) {
-				return DOCUMENTS;
-			}
-		}
-		for (int i = 0; i < cmp.length; i++) {
-			if (file.endsWith(cmp[i])) {
-				return COMPRESSED;
-			}
-		}
-		for (int i = 0; i < music.length; i++) {
-			if (file.endsWith(music[i])) {
-				return MUSIC;
-			}
-		}
-		for (int i = 0; i < prog.length; i++) {
-			if (file.endsWith(prog[i])) {
-				return PROGRAMS;
-			}
-		}
-		for (int i = 0; i < vid.length; i++) {
-			if (file.endsWith(vid[i])) {
-				return VIDEO;
-			}
-		}
-		return OTHER;
-	}
-
 	public static String getFileName2(String url) {
 		String file = null;
 		try {

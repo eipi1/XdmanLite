@@ -33,7 +33,7 @@ public class YTDThread implements Runnable {
 	XDMConfig config;
 	boolean stop;
 	YoutubeListener listener;
-	ParserProgressListner plistner;
+	public ParserProgressListner plistner;
 
 	public YTDThread(String url, XDMConfig config, YoutubeListener listener) {
 		this.url = url;

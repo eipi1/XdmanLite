@@ -59,7 +59,7 @@ import org.sdg.xdman.core.common.Authenticator;
 import org.sdg.xdman.core.common.Credential;
 import org.sdg.xdman.core.common.XDMConfig;
 
-public class ConfigWindow extends JDialog implements TreeSelectionListener,
+public class ConfigDialog extends JDialog implements TreeSelectionListener,
 		ActionListener {
 
 	private static final long serialVersionUID = -8869224019635935507L;
@@ -120,7 +120,7 @@ public class ConfigWindow extends JDialog implements TreeSelectionListener,
 
 	JComboBox ctype;
 
-	public ConfigWindow(XDMConfig c, JFrame f) {
+	public ConfigDialog(XDMConfig c, JFrame f) {
 		super(f);
 		setTitle("Configure");
 		setIconImage(Main.icon.getImage());
@@ -900,6 +900,6 @@ public class ConfigWindow extends JDialog implements TreeSelectionListener,
 	}
 
 	public static void main(String a[]) {
-		new ConfigWindow(new XDMConfig(null), null).showDialog();
+		new ConfigDialog(new XDMConfig(null), null).showDialog();
 	}
 }
