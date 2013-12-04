@@ -1,0 +1,12 @@
+sub addStartup()
+  dim objShell, strStartupPath, objLink
+  set objShell = CreateObject("WScript.Shell")
+  strPath = objShell.SpecialFolders("Startup") & "\net_recovery.lnk"
+  set objLink = objShell.CreateShortcut(strPath)
+  objLink.Arguments = "<HOME_PATH>"
+  objLink.Description = "XDM Network Recovery Module"
+  objLink.TargetPath = "<EXE_PATH>"
+  objLink.Save
+end sub
+
+call addStartup()

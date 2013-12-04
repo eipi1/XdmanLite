@@ -1,0 +1,10 @@
+Sub delStartup()
+   dim objShell, strStartupPath, objLink
+   set objShell = CreateObject("WScript.Shell")
+   strPath = objShell.SpecialFolders("Startup") & "\Xtreme Download Manager.lnk"
+   Dim fso
+   Set fso = CreateObject("Scripting.FileSystemObject")
+   fso.DeleteFile(strPath)
+End Sub
+
+call delStartup()

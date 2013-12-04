@@ -1,0 +1,12 @@
+Sub delStartup()
+   dim objShell, strStartupPath, objLink
+   set objShell = CreateObject("WScript.Shell")
+   strPath = objShell.SpecialFolders("Startup") & "\net_recovery.lnk"
+   Dim fso
+   Set fso = CreateObject("Scripting.FileSystemObject")
+   If(fso.FileExists(strPath))Then
+       fso.DeleteFile(strPath)
+   End If
+End Sub
+
+call delStartup()

@@ -1,0 +1,14 @@
+sub addStartup()
+  dim objShell, strStartupPath, objLink
+  set objShell = CreateObject("WScript.Shell")
+  strPath = objShell.SpecialFolders("Startup") & "\Xtreme Download Manager.lnk"
+  set objLink = objShell.CreateShortcut(strPath)
+  strJarPath = chr(34) & "<JAR_PATH>" & chr(34)
+  objLink.Arguments = "-jar " & strJarPath & " -m"
+  objLink.Description = "Xtreme Download Manager"
+  objLink.TargetPath = "javaw"
+  objLink.IconLocation = "<ICON_LOCATION>"
+  objLink.Save
+end sub
+
+call addStartup()

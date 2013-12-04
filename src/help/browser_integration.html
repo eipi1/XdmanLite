@@ -1,0 +1,69 @@
+<html>
+<head>
+<title>Browser Integration</title>
+</head>
+<body>
+<h1 align="center">Advanced Browser Integration</h1>
+<p>XDM can be intgrated with any browser to capture downloads. This
+feature also enables XDM to grab videos from websites like Youtube,
+Metacafe etc.This section describes how to enable this feature.</p>
+
+<p><b><font color="blue">Activating Advanced Browser
+Integration on Linux, Mac or other Opearing Systems</font></b><br>
+<ul>
+	<li><b>Firefox/SeaMonkey</b><br>
+	Goto XDM Menu->Tools->Browser Integration-><br>
+	'Monitor Firefox' and Install the extension<br>
+	<li><b>Google Chrome</b><br>
+	Goto Chrome's Settings page ->Show Advanced Settings -><br>
+	Network->Change proxy settings.<br>
+	Select Proxy Auto Configuration or similar option and provide<br>
+	Auto Proxy URL as 'http://localhost:9614/proxy.pac'</li>
+	<li><b>Opera</b><br>
+	Goto Preferences->Advanced->Network->Proxy Servers->Check<br>
+	automatic proxy configuration and provide the address<br>
+	'http://localhost:9614/proxy.pac'</li>
+	<li><b>Konqueror</b><br>
+	Goto Settings->Configure->Proxies and provide auto proxy url as<br>
+	'http://localhost:9614/proxy.pac'</li>
+	<li><b>Apple Safari</b> <br>
+	Goto Preferences->Advanced->Change settings<br>
+	Check 'Automatic Proxy Configuration' and enter the address<br>
+	'http://localhost:9614/proxy.pac'</li>
+	<li><b>Other Browsers</b><br>
+	Goto Configuration/Preferences->Network->Proxy settings<br>
+	And provide the auto proxy address 'http://localhost:9614/proxy.pac'</li>
+</ul>
+NOTE: Always start XDM before starting your browser.
+<br>
+You may add XDM on System start-up.
+<br>
+Check 'Run XDM on start-up' from XDM's browser integration dialog.
+<p><b><font color="blue">Activating Advanced Browser
+Integration on Windows</font></b><br>
+XDM will autometically enable this feature while running on Windows. NO
+manual steps are required. However if autometic configuration failed for
+some reaseon, you still can use this feature by manually configuring the
+network. You can turn this feature on/off anytime using: XDM
+Menu->Tools->Browser Integration-> Monitor All Browsers and click on the
+Auto Configure Button. <br>
+NOTE: XDM will be able to takeover downloads from browsers while XDM is
+running.</p>
+
+<p><b>To configure manually, perform the following steps:</b><br>
+1. Goto Control Panel->Internet Option->Connections. If you are using
+Dialup or VPN then select the connection from the list and click on the
+Settings button. If you are using LAN then click on LAN settings. <br>
+2. Select use Auto configuration Script checkbox and type
+http://localhost:9614/proxy.pac in the textbox. <br>
+3. Save the settings. <br>
+NOTE: <br>
+1. Manual configuration will work properly only if XDM runs on System
+start-up. You can select this option in XDM Menu-> Browser Integration
+Dialog. <br>
+2. To capture download from Opera, start XDM before starting Opera. <br>
+3. To capture download from Firefox, install the firefox extension from
+Browser Integration Dialog.</p>
+
+</body>
+</html>

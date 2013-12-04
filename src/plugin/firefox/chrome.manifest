@@ -1,0 +1,6 @@
+content	db	chrome/content/
+overlay	chrome://browser/content/browser.xul	chrome://db/content/overlay.xul
+overlay 	chrome://navigator/content/navigator.xul chrome://db/content/overlay.xul
+overlay 	chrome://songbird/content/xul/mainScriptsOverlay.xul chrome://db/content/overlay.xul
+
+resource module modules/
